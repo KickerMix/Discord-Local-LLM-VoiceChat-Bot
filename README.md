@@ -91,6 +91,7 @@ torchaudio 2.2.0+cu121
 ├── sample/                 # Sample .wav files for voice cloning
 │   └── sample_default.wav  # Default cloning voice
 ├── main.py                 # Bot implementation
+├── .env                    # Settings for bot
 ├── requirements.txt        # Python dependencies
 ├── settings.json           # TTS mode & sample file (auto-generated)
 ├── bot_debug.log           # Debug logging
