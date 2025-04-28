@@ -27,6 +27,8 @@ Listed in `requirements.txt`:
 Also you need to install torch and torchaudio. For now it was tested only with:
 torch 2.2.0+cu121
 torchaudio 2.2.0+cu121
+
+Example: 	pip install torch==2.2.0+cu121 torchvision==0.17.0+cu121 torchaudio==2.2.0+cu121 --index-url https://download.pytorch.org/whl/cu121
 ```
 
 ## Installation
