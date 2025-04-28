@@ -57,7 +57,7 @@ torchaudio 2.2.0+cu121
    ```
 
 ## Configuration
-1. **Environment variables**: Copy `.env.example` to `.env` and set:
+1. **Environment variables**: Create `.env` and set:
    ```ini
    DISCORD_TOKEN=YOUR_DISCORD_BOT_TOKEN
    LM_STUDIO_API_URL=http://127.0.0.1:5000    # or your LM Studio endpoint
