@@ -1,5 +1,11 @@
 # Discord Local LLM Voice Chat Bot
 
+> **Disclaimer**  
+> This project was entirely developed with the assistance of ChatGPT.  
+> It is currently in a very early (alpha) stage of development.  
+> Bugs, crashes, and unexpected behavior are likely to occur.  
+> Use with caution and report any issues to help improve the project.
+
 A Discord voice chat bot that uses OpenAI Whisper for real-time speech-to-text (STT), Coqui TTS for text-to-speech (TTS), and a local LLM (LM Studio) for conversational responses — all running locally.
 
 ## Features
