@@ -80,6 +80,8 @@ pip install torch==2.2.0+cu121 torchvision==0.17.0+cu121 torchaudio==2.2.0+cu121
 ## Usage
 1. **Start the bot**:
    ```
+   # You can use bot.bat
+   or
    python main.py
    ```
 2. **Interact on Discord**:
