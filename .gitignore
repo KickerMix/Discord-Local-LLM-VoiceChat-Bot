@@ -1,0 +1,37 @@
+# Virtual environment
+venv/
+
+# Audio files folder
+audio/
+
+# Environment variables file
+.env
+
+# Debug log
+bot_debug.log
+
+# Settings file
+settings.json
+
+# Ignore everything in sample folder except sample_default.wav
+/sample/*
+!/sample/
+!/sample/sample_default.wav
+
+# Compiled Python files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build and distribution artifacts
+build/
+dist/
+*.egg-info/
+
+# IDE and editor folders
+.vscode/
+.idea/
+
+# System files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,6 @@
+interactions.py
+faster-whisper
+TTS
+python-dotenv
+aiohttp
+PyNaCl
