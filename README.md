@@ -106,10 +106,13 @@ pip install torch==2.2.0+cu121 torchvision==0.17.0+cu121 torchaudio==2.2.0+cu121
 ├── audio/                  # Recorded audio & generated responses at runtime
 ├── sample/                 # Sample .wav files for voice cloning
 │   └── sample_default.wav  # Default cloning voice
-├── main.py                 # Bot implementation
 ├── .env                    # Settings for bot
+├── main.py                 # Bot implementation
 ├── requirements.txt        # Python dependencies
 ├── bot_debug.log           # Debug logging
+├── join.wav                # wav file for play on connecting to vc
+├── trigger.wav             # wav file for play on keyword triggering start
+├── listening.wav           # wav file for play on keyword triggering stop
 ├── .gitignore              # Ignored files & folders
 ```
 
