@@ -116,5 +116,13 @@ pip install torch==2.2.0+cu121 torchvision==0.17.0+cu121 torchaudio==2.2.0+cu121
 ├── .gitignore              # Ignored files & folders
 ```
 
+## Known Issues
+- The bot may occasionally disconnect from the voice channel. After disconnecting, it will stop functioning properly until fully restarted.
+- Slash commands may sometimes respond slowly or fail to trigger.
+- The bot may not always accurately detect keywords, especially in the presence of background noise or unclear speech.
+- Under high system load, transcription and response generation may experience noticeable delays.
+- Voice cloning mode may produce artifacts or degraded audio quality.
+- Having multiple active speakers in the voice channel may cause confusion in speech processing and keyword detection.
+
 ## License
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
