@@ -17,6 +17,7 @@ from interactions import (
     Button,
     ButtonStyle,
     ComponentContext,
+    ActionRow,
     Embed,
 )
 from interactions.api.events import Startup
@@ -465,21 +466,28 @@ def generate_file_list_page(files, page=1, items_per_page=5):
     for idx, fname in enumerate(selected_files, start=start_idx + 1):
         embed.add_field(name=f"{idx}. {fname}", value=fname, inline=False)
 
-    components = []
+    # navigation buttons (at most 2)
+    nav_buttons = []
     if page > 1:
-        components.append(Button(label="« Back", custom_id="prev_page", style=ButtonStyle.SECONDARY))
+        nav_buttons.append(Button(label="« Back", custom_id="prev_page", style=ButtonStyle.SECONDARY))
     if end_idx < len(files):
-        components.append(Button(label="Next »", custom_id="next_page", style=ButtonStyle.SECONDARY))
+        nav_buttons.append(Button(label="Next »", custom_id="next_page", style=ButtonStyle.SECONDARY))
 
-    for idx, fname in enumerate(selected_files, start=start_idx + 1):
-        components.append(Button(
-            label=str(idx),
-            custom_id=f"select_{fname}",
-            style=ButtonStyle.PRIMARY
-        ))
+    # selection buttons (up to items_per_page, i.e. ≤5)
+    select_buttons = [
+        Button(label=str(idx), custom_id=f"select_{fname}", style=ButtonStyle.PRIMARY)
+        for idx, fname in enumerate(selected_files, start=start_idx + 1)
+    ]
 
-    return embed, components
+    # wrap into ActionRows (each row ≤5 components)
+    rows = []
+    if select_buttons:
+        rows.append(ActionRow(*select_buttons))
+    if nav_buttons:
+        rows.append(ActionRow(*nav_buttons))
 
+    return embed, rows
+    
 @slash_command(name="saya_list", description="Show the list of files and select one.")
 async def saya_list(ctx: SlashContext):
     global CURRENT_SPEAKER_WAV
@@ -519,5 +527,38 @@ async def saya_list(ctx: SlashContext):
     except asyncio.TimeoutError:
         # Cleanup ephemeral menu on timeout
         await ctx.edit(components=[])
+
+# ── upload custom WAV ───────────────────────────────────────────
+@slash_command(
+    name="upload_wav",
+    description="Upload your own .wav file for cloning",
+    options=[
+        SlashCommandOption(
+            name="file",
+            description="Your .wav file",
+            type=OptionType.ATTACHMENT,
+            required=True
+        )
+    ]
+)
+async def upload_wav(ctx: SlashContext, file):
+    # Validate extension
+    if not file.filename.lower().endswith(".wav"):
+        return await ctx.send("❗ Please upload a .wav file.", ephemeral=True)
+
+    # Download the file into ./sample
+    dest = Path("./sample") / file.filename
+    async with aiohttp.ClientSession() as sess:
+        async with sess.get(file.url) as resp:
+            if resp.status != 200:
+                return await ctx.send("❗ Failed to download the file. Please try again.", ephemeral=True)
+            data = await resp.read()
+    dest.write_bytes(data)
+
+    await ctx.send(
+        f"✅ File `{file.filename}` successfully uploaded to `./sample`.\n"
+        "You can now select it via `/saya_list`.",
+        ephemeral=True
+    )
 
 bot.start()
