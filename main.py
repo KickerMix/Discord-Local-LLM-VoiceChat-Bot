@@ -189,7 +189,7 @@ async def stop_recording(voice_state):
 
 async def transcribe_audio(audio_path: str) -> str:
     def _transcribe_blocking(path):
-        segments, info = stt_model.transcribe(path, language="ru", beam_size=5)
+        segments, info = stt_model.transcribe(path, language="en", beam_size=5)
         return segments, info
 
     try:
