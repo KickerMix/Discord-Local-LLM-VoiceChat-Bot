@@ -80,6 +80,7 @@ pip install torch==2.2.0+cu121 torchvision==0.17.0+cu121 torchaudio==2.2.0+cu121
    ```ini
    DISCORD_TOKEN=YOUR_DISCORD_BOT_TOKEN
    LM_STUDIO_API_URL=http://127.0.0.1:5000    # or your LM Studio endpoint
+   LANGUAGE=en
    ROLE=System prompt or role content for LLM
    KEYWORDS=hello,bot           # comma-separated keywords to trigger
    GUILD_ID=123456789012345678          # your Discord server ID
