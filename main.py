@@ -2,6 +2,7 @@ import os
 import json
 import asyncio
 import logging
+from logging.handlers import RotatingFileHandler
 import re
 from pathlib import Path
 import interactions
@@ -22,8 +23,9 @@ from interactions.api.events import Startup
 from interactions.api.voice.audio import AudioVolume
 from faster_whisper import WhisperModel
 from TTS.api import TTS
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key, find_dotenv
 import aiohttp
+from aiohttp import ClientTimeout, ClientError
 from datetime import datetime
 
 # ── Logging configuration ─────────────────────────────────────────────────────
@@ -33,45 +35,33 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("bot_debug.log", encoding="utf-8")
+        RotatingFileHandler(
+            "bot_debug.log",
+            maxBytes=5*1024*1024,      # new log after 5MB
+            backupCount=5,             # store up to 5 log files
+            encoding="utf-8"
+        )
     ]
 )
 logger = logging.getLogger(__name__)
 
-# ── Settings file path and defaults ───────────────────────────────────────────
-SETTINGS_PATH = Path("settings.json")
-DEFAULT_SETTINGS = {
-    "TTS_MODE": "default",
-    "selected_file_path": "./sample/sample_miside.wav"
-}
-
-def load_settings():
-    if SETTINGS_PATH.exists():
-        try:
-            return json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            logger.warning("settings.json is corrupted, overwriting with default settings")
-    save_settings(DEFAULT_SETTINGS)
-    return DEFAULT_SETTINGS.copy()
-
-def save_settings(settings: dict):
-    SETTINGS_PATH.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
-
-# ── Loading and initializing settings ─────────────────────────────────────────
-settings = load_settings()
-TTS_MODE = settings["TTS_MODE"]
-current_speaker_wav = settings["selected_file_path"]
-
 # ── Environment variables and constants ────────────────────────────────────────
-load_dotenv()
+# Find .env & load
+dotenv_path = find_dotenv()
+load_dotenv(dotenv_path)
 TOKEN = os.getenv("DISCORD_TOKEN")
 LM_STUDIO_API_URL = os.getenv("LM_STUDIO_API_URL", "http://127.0.0.1:5000")
 ROLE = os.getenv("ROLE", "")
 KEYWORDS = [w.strip() for w in os.getenv("KEYWORDS", "").split(",") if w.strip()]
+LANGUAGE      = os.getenv("LANGUAGE", "en")
+GUILD_ID      = int(os.getenv("GUILD_ID", "0"))
+
+# TTS settings from .env
+TTS_MODE = os.getenv("TTS_MODE", "default")
+CURRENT_SPEAKER_WAV = os.getenv("SELECTED_FILE_PATH", "./sample/sample_default.wav")
 
 AUDIO_DIR = Path(os.path.abspath("./audio"))
 AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-GUILD_ID = 188965959707525120  # replace with your guild id
 
 # Compile regex for keywords
 pattern = (r"\b(?:" + "|".join(re.escape(w) for w in KEYWORDS) + r")\b") if KEYWORDS else None
@@ -85,6 +75,31 @@ stt_model = WhisperModel(
 )
 tts = TTS(model_name="multilingual/multi-dataset/xtts_v2")
 tts.to("cuda")
+
+
+#
+# Helper for HTTP POST with timeout and retries
+#
+async def post_with_retries(url, json_payload, retries=3, backoff_factor=2):
+    """
+    Init POST `url` with `json_payload`,
+    timeout and retries handler
+    """
+    timeout = ClientTimeout(total=10)  # timeout 10s
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        for attempt in range(1, retries + 1):
+            try:
+                async with session.post(url, json=json_payload) as resp:
+                    resp.raise_for_status()
+                    return await resp.json()
+            except (ClientError, asyncio.TimeoutError) as e:
+                if attempt == retries:
+                    logger.error(f"LM API failed after {retries} attempts: {e}")
+                    return None
+                delay = backoff_factor ** (attempt - 1)
+                logger.warning(f"LM API error (attempt {attempt}/{retries}): {e}; retrying in {delay}s")
+                await asyncio.sleep(delay)
+
 
 # ── Main bot with voice recording ────────────────────────────────────────────────
 intents = Intents.ALL
@@ -115,22 +130,39 @@ async def on_startup():
             voice = await channel.connect()
             logger.info(f"Auto-connecting to {nick} in channel {channel.name}")
             prompt = f'Greet the user "{nick}" and introduce yourself as "Saya".'
-            async with aiohttp.ClientSession() as sess:
-                payload = {
-                    "model": "your-model-id",
-                    "messages": [{"role": "system", "content": ROLE}, {"role": "user", "content": prompt}],
-                    "max_tokens": 350
-                }
-                resp = await sess.post(f"{LM_STUDIO_API_URL}/v1/chat/completions", json=payload)
-                data = await resp.json()
-            greeting = data["choices"][0]["message"]["content"]
+            async def post_with_retries(url, json_payload, retries=3, backoff_factor=2):
+                timeout = ClientTimeout(total=10)  # timeout 10s
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    for attempt in range(1, retries+1):
+                        try:
+                            async with session.post(url, json=json_payload) as resp:
+                                resp.raise_for_status()
+                                return await resp.json()
+                        except (ClientError, asyncio.TimeoutError) as e:
+                            if attempt == retries:
+                                logger.error(f"LM API failed after {retries} tries: {e}")
+                                return None
+                            sleep = backoff_factor ** (attempt - 1)
+                            logger.warning(f"LM API error (attempt {attempt}/{retries}): {e}, retrying in {sleep}s")
+                            await asyncio.sleep(sleep)
+        
+            payload = {
+                "model": "your-model-id",
+                "messages": [{"role": "system", "content": ROLE}, {"role": "user", "content": prompt}],
+                "max_tokens": 350
+            }
+            data = await post_with_retries(f"{LM_STUDIO_API_URL}/v1/chat/completions", payload)
+            if not data:
+                greeting = "No answer from LLM server."
+            else:
+                greeting = data["choices"][0]["message"]["content"]
             ts = datetime.now().strftime("%Y%m%d%H%M%S")
             out_path = AUDIO_DIR / f"greet_{ts}.wav"
             await asyncio.to_thread(
                 tts.tts_to_file,
                 text=greeting,
                 speaker="Ana Florence",
-                language="en",
+                language=LANGUAGE,
                 file_path=str(out_path)
             )
             await voice.play(AudioVolume(str(out_path)))
@@ -189,7 +221,7 @@ async def stop_recording(voice_state):
 
 async def transcribe_audio(audio_path: str) -> str:
     def _transcribe_blocking(path):
-        segments, info = stt_model.transcribe(path, language="en", beam_size=5)
+        segments, info = stt_model.transcribe(path, language=LANGUAGE, beam_size=5)
         return segments, info
 
     try:
@@ -212,7 +244,7 @@ async def process_audio_for_user(voice_state, user_id: int, audio_path: str):
             voice_state,
             user_id,
             full_text,
-            speaker_wav=current_speaker_wav
+            speaker_wav=CURRENT_SPEAKER_WAV
         )
 
 async def process_audio_for_individual_user(voice_state, user_id, initial_text, speaker_wav: str):
@@ -259,16 +291,17 @@ async def generate_and_play_response(voice_state, user_id, text: str):
     Pipeline TTS responses one sentence at a time to avoid GPU overload.
     """
     global is_playing_response
-    # 1) Get LLM answer
+    # 1) Get LLM answer with timeout & retries
     ts = datetime.now().strftime("%Y%m%d%H%M%S")
-    async with aiohttp.ClientSession() as session:
-        payload = {
-            "model": "your-model-id",
-            "messages": [{"role": "system", "content": ROLE}, {"role": "user", "content": text}],
-            "max_tokens": 1000
-        }
-        resp = await session.post(f"{LM_STUDIO_API_URL}/v1/chat/completions", json=payload)
-        data = await resp.json()
+    payload = {
+        "model": "your-model-id",
+        "messages": [{"role": "system", "content": ROLE}, {"role": "user", "content": text}],
+        "max_tokens": 1000
+    }
+    data = await post_with_retries(f"{LM_STUDIO_API_URL}/v1/chat/completions", payload)
+    if not data:
+        answer = "No answer from LLM server"
+    else:
         answer = data["choices"][0]["message"]["content"]
 
     # 2) Split into sentences
@@ -282,7 +315,7 @@ async def generate_and_play_response(voice_state, user_id, text: str):
         tts.tts_to_file(
             text=sentence,
             speaker="Ana Florence",
-            language="en",
+            language=LANGUAGE,
             file_path=str(out)
         )
         return str(out)
@@ -313,16 +346,17 @@ async def generate_and_play_voiceclone_response(voice_state, user_id, text: str,
     Pipeline TTS-clone responses one sentence at a time to avoid GPU overload.
     """
     global is_playing_response
-    # 1) Get LLM answer
+    # 1) Get LLM answer with timeout & retries
     ts = datetime.now().strftime("%Y%m%d%H%M%S")
-    async with aiohttp.ClientSession() as session:
-        payload = {
-            "model": "your-model-id",
-            "messages": [{"role": "system", "content": ROLE}, {"role": "user", "content": text}],
-            "max_tokens": 1000
-        }
-        resp = await session.post(f"{LM_STUDIO_API_URL}/v1/chat/completions", json=payload)
-        data = await resp.json()
+    payload = {
+        "model": "your-model-id",
+        "messages": [{"role": "system", "content": ROLE}, {"role": "user", "content": text}],
+        "max_tokens": 1000
+    }
+    data = await post_with_retries(f"{LM_STUDIO_API_URL}/v1/chat/completions", payload)
+    if not data:
+        answer = "No answer from LLM server."
+    else:
         answer = data["choices"][0]["message"]["content"]
 
     # 2) Split into sentences
@@ -336,7 +370,7 @@ async def generate_and_play_voiceclone_response(voice_state, user_id, text: str,
         tts.tts_to_file(
             text=sentence,
             speaker_wav=speaker_wav,
-            language="en",
+            language=LANGUAGE,
             file_path=str(out)
         )
         return str(out)
@@ -410,12 +444,12 @@ async def leave(ctx: SlashContext):
     ]
 )
 async def saya_tts(ctx: SlashContext, mode: str):
-    global TTS_MODE, settings
+    global TTS_MODE
     if mode not in ("default", "clone"):
         return await ctx.send("❗ Invalid mode, choose 'default' or 'clone'.", ephemeral=True)
     TTS_MODE = mode
-    settings["TTS_MODE"] = TTS_MODE
-    save_settings(settings)
+    # Persist to .env
+    set_key(dotenv_path, "TTS_MODE", mode)
     await ctx.send(f"✅ TTS mode set to: `{mode}`")
 
 # ── Pagination for file list ─────────────────────────────────────────────────
@@ -448,8 +482,7 @@ def generate_file_list_page(files, page=1, items_per_page=5):
 
 @slash_command(name="saya_list", description="Show the list of files and select one.")
 async def saya_list(ctx: SlashContext):
-    global current_speaker_wav, settings
-
+    global CURRENT_SPEAKER_WAV
     sample_files = [f.name for f in Path("./sample").glob("*.wav")]
     if not sample_files:
         return await ctx.send("❗ No `.wav` files found in the `./sample` folder.")
@@ -458,37 +491,33 @@ async def saya_list(ctx: SlashContext):
     embed, components = generate_file_list_page(sample_files, page)
     await ctx.send(embed=embed, components=components, ephemeral=True)
 
-    while True:
-        used = await bot.wait_for_component(
-            components=components,
-            check=lambda c: c.ctx.author.id == ctx.author.id,
-            timeout=60
-        )
-
-        cid = used.ctx.custom_id
-        if cid == "prev_page":
-            page -= 1
-        elif cid == "next_page":
-            page += 1
-        elif cid.startswith("select_"):
-            fname = cid.split("_", 1)[1]
-            current_speaker_wav = f"./sample/{fname}"
-            settings["selected_file_path"] = current_speaker_wav
-            save_settings(settings)
-
-            # Edit original and remove buttons
-            await used.ctx.edit_origin(
-                embed=Embed(
-                    title="Done! 🎉",
-                    description=f"Selected file for cloning: `{fname}`"
-                ),
-                components=[]
+    try:
+        while True:
+            used = await bot.wait_for_component(
+                components=components,
+                check=lambda c: c.ctx.author.id == ctx.author.id,
+                timeout=60
             )
-            # Send separate ephemeral confirmation if desired
-            await used.ctx.send("Configuration saved ✅", ephemeral=True)
-            return
-
-        embed, components = generate_file_list_page(sample_files, page)
-        await used.ctx.edit_origin(embed=embed, components=components)
+            cid = used.ctx.custom_id
+            if cid in ("prev_page", "next_page"):
+                page += -1 if cid == "prev_page" else 1
+            elif cid.startswith("select_"):
+                fname = cid.split("_", 1)[1]
+                CURRENT_SPEAKER_WAV = f"./sample/{fname}"
+                # Persist to .env
+                set_key(dotenv_path, "SELECTED_FILE_PATH", CURRENT_SPEAKER_WAV)
+                await used.ctx.edit_origin(
+                    embed=Embed(
+                        title="Done! 🎉",
+                        description=f"Selected file for cloning: `{fname}`"
+                    ),
+                    components=[]
+                )
+                return await used.ctx.send("Configuration saved ✅", ephemeral=True)
+            embed, components = generate_file_list_page(sample_files, page)
+            await used.ctx.edit_origin(embed=embed, components=components)
+    except asyncio.TimeoutError:
+        # Cleanup ephemeral menu on timeout
+        await ctx.edit(components=[])
 
 bot.start()
