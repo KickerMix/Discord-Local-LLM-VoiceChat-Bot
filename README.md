@@ -4,7 +4,10 @@
 > This project was entirely developed with the assistance of ChatGPT.  
 > It is currently in a very early (alpha) stage of development.  
 > Bugs, crashes, and unexpected behavior are likely to occur.  
-> Use with caution and report any issues to help improve the project.
+> Use with caution and report any issues to help improve the project.  
+>
+> Tested with RTX 3060 (12GB) and RTX 4060 (8GB).  
+> Running all of this on CUDA takes about >7GB VRAM and >6GB RAM (Depends on your LLM Model)
 
 A Discord voice chat bot that uses OpenAI Whisper for real-time speech-to-text (STT), Coqui TTS for text-to-speech (TTS), and a local LLM (LM Studio) for conversational responses — all running locally.
 
@@ -28,8 +31,8 @@ A Discord voice chat bot that uses OpenAI Whisper for real-time speech-to-text (
 - **CUDA 12.1** (for GPU acceleration)
 - **CUDA Toolkit** (https://developer.nvidia.com/cuda-downloads?target_os=Windows&target_arch=x86_64&target_version=11&target_type=exe_local)
 - **cuDNN** (https://developer.nvidia.com/cudnn)
-- 
-- **Additional: cudnn_ops64_9.dll** (https://github.com/Purfview/whisper-standalone-win/releases/download/libs/cuBLAS.and.cuDNN_CUDA12_win_v2.7z)
+## Additional Requirements
+- **cudnn_ops64_9.dll** (https://github.com/Purfview/whisper-standalone-win/releases/download/libs/cuBLAS.and.cuDNN_CUDA12_win_v2.7z)
 - **^** Unpack cudnn_ops64_9.dll to "\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin"
 
 ### Python dependencies
@@ -38,8 +41,10 @@ Listed in `requirements.txt`:
 Also you need to install torch and torchaudio. For now it was tested only with:
 torch 2.2.0+cu121
 torchaudio 2.2.0+cu121
-
+```
 Example:
+
+```
 pip install torch==2.2.0+cu121 torchvision==0.17.0+cu121 torchaudio==2.2.0+cu121 --index-url https://download.pytorch.org/whl/cu121
 ```
 
@@ -78,15 +83,9 @@ pip install torch==2.2.0+cu121 torchvision==0.17.0+cu121 torchaudio==2.2.0+cu121
    ROLE=System prompt or role content for LLM
    KEYWORDS=hello,bot           # comma-separated keywords to trigger
    GUILD_ID=123456789012345678          # your Discord server ID
+   TTS_MODE='default'
+   SELECTED_FILE_PATH='./sample/sample_default.wav'
    ```
-2. **Default settings** in `settings.json`:
-   ```json
-   {
-     "TTS_MODE": "default",
-     "selected_file_path": "./sample/sample_default.wav"
-   }
-   ```
-   This file is auto-generated on first run if missing. It stores your chosen TTS mode and sample file to use.
 
 ## Usage
 1. **Start the bot**:
@@ -109,10 +108,8 @@ pip install torch==2.2.0+cu121 torchvision==0.17.0+cu121 torchaudio==2.2.0+cu121
 ├── main.py                 # Bot implementation
 ├── .env                    # Settings for bot
 ├── requirements.txt        # Python dependencies
-├── settings.json           # TTS mode & sample file (auto-generated)
 ├── bot_debug.log           # Debug logging
 ├── .gitignore              # Ignored files & folders
-└── .env.example            # Environment variable template
 ```
 
 ## License
