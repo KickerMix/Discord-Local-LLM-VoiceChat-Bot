@@ -28,6 +28,7 @@ A Discord voice chat bot that uses OpenAI Whisper for real-time speech-to-text (
 - **CUDA 12.1** (for GPU acceleration)
 - **CUDA Toolkit** (https://developer.nvidia.com/cuda-downloads?target_os=Windows&target_arch=x86_64&target_version=11&target_type=exe_local)
 - **cuDNN** (https://developer.nvidia.com/cudnn)
+
 - **Additional: cudnn_ops64_9.dll** (https://github.com/Purfview/whisper-standalone-win/releases/download/libs/cuBLAS.and.cuDNN_CUDA12_win_v2.7z)
 - **^** Unpack cudnn_ops64_9.dld to "\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin"
 
