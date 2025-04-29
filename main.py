@@ -26,7 +26,7 @@ from dotenv import load_dotenv
 import aiohttp
 from datetime import datetime
 
-# ── Настройка логирования ─────────────────────────────────────────────────────
+# ── Logging configuration ─────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.DEBUG,
     format="[%(asctime)s] %(levelname)s:%(name)s: %(message)s",
@@ -38,7 +38,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Путь к файлу настроек и дефолты ───────────────────────────────────────────
+# ── Settings file path and defaults ───────────────────────────────────────────
 SETTINGS_PATH = Path("settings.json")
 DEFAULT_SETTINGS = {
     "TTS_MODE": "default",
@@ -50,19 +50,19 @@ def load_settings():
         try:
             return json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
-            logger.warning("settings.json повреждён, перезаписываем дефолтными настройками")
+            logger.warning("settings.json is corrupted, overwriting with default settings")
     save_settings(DEFAULT_SETTINGS)
     return DEFAULT_SETTINGS.copy()
 
 def save_settings(settings: dict):
     SETTINGS_PATH.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
 
-# ── Загрузка и инициализация настроек ─────────────────────────────────────────
+# ── Loading and initializing settings ─────────────────────────────────────────
 settings = load_settings()
 TTS_MODE = settings["TTS_MODE"]
 current_speaker_wav = settings["selected_file_path"]
 
-# ── Переменные окружения и константы ──────────────────────────────────────────
+# ── Environment variables and constants ────────────────────────────────────────
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 LM_STUDIO_API_URL = os.getenv("LM_STUDIO_API_URL", "http://127.0.0.1:5000")
@@ -71,13 +71,13 @@ KEYWORDS = [w.strip() for w in os.getenv("KEYWORDS", "").split(",") if w.strip()
 
 AUDIO_DIR = Path(os.path.abspath("./audio"))
 AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-GUILD_ID = 188965959707525120  # замените на ваш guild id
+GUILD_ID = 188965959707525120  # replace with your guild id
 
-# Компиляция regex ключевых слов
+# Compile regex for keywords
 pattern = (r"\b(?:" + "|".join(re.escape(w) for w in KEYWORDS) + r")\b") if KEYWORDS else None
 KEYWORD_RE = re.compile(pattern, flags=re.IGNORECASE) if pattern else None
 
-# ── Инициализация Whisper и TTS ────────────────────────────────────────────────
+# ── Initializing Whisper and TTS ────────────────────────────────────────────────
 stt_model = WhisperModel(
     model_size_or_path="large-v2",
     device="cuda",
@@ -86,7 +86,7 @@ stt_model = WhisperModel(
 tts = TTS(model_name="multilingual/multi-dataset/xtts_v2")
 tts.to("cuda")
 
-# ── Основной бот с голосовой записью ────────────────────────────────────────────
+# ── Main bot with voice recording ────────────────────────────────────────────────
 intents = Intents.ALL
 bot = interactions.Client(token=TOKEN, intents=intents)
 
@@ -97,24 +97,24 @@ current_channel = None
 
 @bot.listen(Startup)
 async def on_startup():
-    global is_connected  # добавляем для явного изменения глобальной переменной
-    is_connected = False  # сбрасываем состояние подключения при старте
+    global is_connected  # explicitly modify the global variable
+    is_connected = False  # reset connection state on startup
 
     guild = await bot.fetch_guild(GUILD_ID)
     all_states = guild.voice_states
 
-    # Ищем канал с одним человеком
+    # Find a channel with exactly one member
     for channel in guild.channels:
         if channel.type is not interactions.ChannelType.GUILD_VOICE:
             continue
         members_states = [vs for vs in all_states if vs.channel and vs.channel.id == channel.id]
-        if len(members_states) == 1:  # Канал с одним человеком
+        if len(members_states) == 1:  # Channel with one person
             vs_state = members_states[0]
             member = vs_state.member
             nick = member.display_name
             voice = await channel.connect()
-            logger.info(f"Автоподключение к {nick} в канале {channel.name}")
-            prompt = f'Поприветствуй пользователя "{nick}" и представься своим именем "Сая".'
+            logger.info(f"Auto-connecting to {nick} in channel {channel.name}")
+            prompt = f'Greet the user "{nick}" and introduce yourself as "Saya".'
             async with aiohttp.ClientSession() as sess:
                 payload = {
                     "model": "your-model-id",
@@ -130,7 +130,7 @@ async def on_startup():
                 tts.tts_to_file,
                 text=greeting,
                 speaker="Ana Florence",
-                language="ru",
+                language="en",
                 file_path=str(out_path)
             )
             await voice.play(AudioVolume(str(out_path)))
@@ -139,28 +139,28 @@ async def on_startup():
             asyncio.create_task(start_recording(voice, str(AUDIO_DIR)))
             break
     else:
-        # Если канал с одним человеком не найден, ищем канал с несколькими людьми
+        # If no single-person channel is found, search for a channel with multiple people
         for channel in guild.channels:
             if channel.type is not interactions.ChannelType.GUILD_VOICE:
                 continue
             members_states = [vs for vs in all_states if vs.channel and vs.channel.id == channel.id]
-            if len(members_states) > 1:  # Канал с несколькими людьми
+            if len(members_states) > 1:  # Channel with multiple people
                 voice = await channel.connect()
-                logger.info(f"Автоподключение к каналу {channel.name} с несколькими людьми.")
-                await asyncio.sleep(2)  # Подключение, затем начинаем прослушивать
+                logger.info(f"Auto-connecting to channel {channel.name} with multiple people.")
+                await asyncio.sleep(2)  # Wait briefly before starting to listen
                 await voice.play(AudioVolume("join.wav"))
                 asyncio.create_task(start_recording(voice, str(AUDIO_DIR)))
                 break
 
-    logger.info("Бот перешёл в режим ожидания ключевых слов.")
+    logger.info("Bot is now waiting for keywords.")
 
 async def reconnect_voice(channel):
     try:
         if channel:
             return await channel.connect()
-        logger.error("Не найден канал для реконнекта.")
+        logger.error("Channel not found for reconnect.")
     except Exception as e:
-        logger.error(f"Ошибка при реконнекте в голосовой канал: {e}")
+        logger.error(f"Error reconnecting to voice channel: {e}")
     return None
 
 async def start_recording(voice_state, output_dir: str):
@@ -168,7 +168,7 @@ async def start_recording(voice_state, output_dir: str):
     if not voice_state:
         voice_state = await reconnect_voice(current_channel) if current_channel else None
         if not voice_state:
-            logger.error("Не удалось восстановить подключение.")
+            logger.error("Failed to restore connection.")
             return
     async with recording_lock:
         await voice_state.start_recording(output_dir=output_dir, encoding="wav")
@@ -198,13 +198,13 @@ async def transcribe_audio(audio_path: str) -> str:
         logger.debug(f"Detected language '{info.language}' (p={info.language_probability:.2f})")
         return " ".join(texts)
     except Exception as e:
-        logger.error(f"Ошибка при транскрипции: {e}")
+        logger.error(f"Error during transcription: {e}")
         return ""
 
 async def process_audio_for_user(voice_state, user_id: int, audio_path: str):
     global is_playing_response
     full_text = await transcribe_audio(audio_path)
-    logger.debug(f"Текст: {full_text}")
+    logger.debug(f"Text: {full_text}")
     if KEYWORD_RE and KEYWORD_RE.search(full_text):
         is_playing_response = True
         await voice_state.play(AudioVolume("trigger.wav"))
@@ -217,7 +217,7 @@ async def process_audio_for_user(voice_state, user_id: int, audio_path: str):
 
 async def process_audio_for_individual_user(voice_state, user_id, initial_text, speaker_wav: str):
     global is_playing_response, current_channel
-    # Очистка старых записей
+    # Clear old recordings
     for old in AUDIO_DIR.rglob("*.wav"):
         old.unlink()
     voice_state.recorder.output.clear()
@@ -233,19 +233,19 @@ async def process_audio_for_individual_user(voice_state, user_id, initial_text, 
     if not voice_state:
         voice_state = await reconnect_voice(current_channel) if current_channel else None
         if not voice_state:
-            logger.error("Не удалось восстановить подключение.")
+            logger.error("Failed to restore connection.")
             return
 
     await voice_state.play(AudioVolume("listening.wav"))
     data = voice_state.recorder.output.get(user_id)
     audio_path = data.get("path") if isinstance(data, dict) else data
     if not audio_path or not os.path.exists(audio_path):
-        logger.error(f"Аудиофайл не существует: {audio_path}")
+        logger.error(f"Audio file does not exist: {audio_path}")
         return
 
     followup = await transcribe_audio(audio_path)
     full_text = f"{initial_text} {followup}".strip()
-    logger.debug(f"Текст: {followup}")
+    logger.debug(f"Text: {followup}")
 
     if TTS_MODE == "default":
         await generate_and_play_response(voice_state, user_id, full_text)
@@ -282,7 +282,7 @@ async def generate_and_play_response(voice_state, user_id, text: str):
         tts.tts_to_file(
             text=sentence,
             speaker="Ana Florence",
-            language="ru",
+            language="en",
             file_path=str(out)
         )
         return str(out)
@@ -310,7 +310,7 @@ async def generate_and_play_response(voice_state, user_id, text: str):
 
 async def generate_and_play_voiceclone_response(voice_state, user_id, text: str, speaker_wav: str):
     """
-    Pipeline TTS-clone responses one at a time to avoid GPU overload.
+    Pipeline TTS-clone responses one sentence at a time to avoid GPU overload.
     """
     global is_playing_response
     # 1) Get LLM answer
@@ -336,7 +336,7 @@ async def generate_and_play_voiceclone_response(voice_state, user_id, text: str,
         tts.tts_to_file(
             text=sentence,
             speaker_wav=speaker_wav,
-            language="ru",
+            language="en",
             file_path=str(out)
         )
         return str(out)
@@ -362,26 +362,26 @@ async def generate_and_play_voiceclone_response(voice_state, user_id, text: str,
     await play_task
     is_playing_response = False
 
-# ── Слэш-команды ─────────────────────────────────────────────────────────────
+# ── Slash commands ─────────────────────────────────────────────────────────────
 @slash_command(
     name="join",
-    description="Подключиться к голосовому каналу."
+    description="Connect to a voice channel."
 )
 async def join(ctx: SlashContext):
     global is_connected, current_channel
     if is_connected:
-        return await ctx.send("Я уже подключён.")
+        return await ctx.send("I'm already connected.")
     if not ctx.author.voice:
-        return await ctx.send("❗ Войдите в голосовой канал и попробуйте снова.")
+        return await ctx.send("❗ Please join a voice channel and try again.")
     vs = await ctx.author.voice.channel.connect()
     is_connected = True
     current_channel = ctx.author.voice.channel
-    await ctx.send("✅ Подключился.")
+    await ctx.send("✅ Connected.")
     asyncio.create_task(start_recording(vs, str(AUDIO_DIR)))
 
 @slash_command(
     name="leave",
-    description="Отключиться от голосового канала."
+    description="Disconnect from the voice channel."
 )
 async def leave(ctx: SlashContext):
     global is_connected, current_channel
@@ -389,17 +389,17 @@ async def leave(ctx: SlashContext):
         await ctx.voice_state.disconnect()
         is_connected = False
         current_channel = None
-        await ctx.send("🛑 Отключился.")
+        await ctx.send("🛑 Disconnected.")
     else:
-        await ctx.send("🤷 Я не подключён.")
+        await ctx.send("🤷 I'm not connected.")
 
 @slash_command(
     name="saya_tts",
-    description="Переключить режим TTS: default или clone",
+    description="Switch TTS mode: default or clone",
     options=[
         SlashCommandOption(
             name="mode",
-            description="Выберите режим TTS",
+            description="Select TTS mode",
             required=True,
             type=OptionType.STRING,
             choices=[
@@ -412,30 +412,30 @@ async def leave(ctx: SlashContext):
 async def saya_tts(ctx: SlashContext, mode: str):
     global TTS_MODE, settings
     if mode not in ("default", "clone"):
-        return await ctx.send("❗ Неверный режим, выберите default или clone.", ephemeral=True)
+        return await ctx.send("❗ Invalid mode, choose 'default' or 'clone'.", ephemeral=True)
     TTS_MODE = mode
     settings["TTS_MODE"] = TTS_MODE
     save_settings(settings)
-    await ctx.send(f"✅ Режим TTS установлен: `{mode}`")
+    await ctx.send(f"✅ TTS mode set to: `{mode}`")
 
-# ── Пагинация для списка файлов ─────────────────────────────────────────────────
+# ── Pagination for file list ─────────────────────────────────────────────────
 def generate_file_list_page(files, page=1, items_per_page=5):
     start_idx = (page - 1) * items_per_page
     end_idx = page * items_per_page
     selected_files = files[start_idx:end_idx]
 
     embed = Embed(
-        title="Список доступных sample-файлов",
-        description="Нажмите на кнопку с номером файла, чтобы выбрать."
+        title="List of available sample files",
+        description="Click the button with the file number to select."
     )
     for idx, fname in enumerate(selected_files, start=start_idx + 1):
         embed.add_field(name=f"{idx}. {fname}", value=fname, inline=False)
 
     components = []
     if page > 1:
-        components.append(Button(label="« Назад", custom_id="prev_page", style=ButtonStyle.SECONDARY))
+        components.append(Button(label="« Back", custom_id="prev_page", style=ButtonStyle.SECONDARY))
     if end_idx < len(files):
-        components.append(Button(label="Вперёд »", custom_id="next_page", style=ButtonStyle.SECONDARY))
+        components.append(Button(label="Next »", custom_id="next_page", style=ButtonStyle.SECONDARY))
 
     for idx, fname in enumerate(selected_files, start=start_idx + 1):
         components.append(Button(
@@ -446,13 +446,13 @@ def generate_file_list_page(files, page=1, items_per_page=5):
 
     return embed, components
 
-@slash_command(name="saya_list", description="Показать список файлов и выбрать один.")
+@slash_command(name="saya_list", description="Show the list of files and select one.")
 async def saya_list(ctx: SlashContext):
     global current_speaker_wav, settings
 
     sample_files = [f.name for f in Path("./sample").glob("*.wav")]
     if not sample_files:
-        return await ctx.send("❗ Нет `.wav` в папке `./sample`.")
+        return await ctx.send("❗ No `.wav` files found in the `./sample` folder.")
 
     page = 1
     embed, components = generate_file_list_page(sample_files, page)
@@ -476,16 +476,16 @@ async def saya_list(ctx: SlashContext):
             settings["selected_file_path"] = current_speaker_wav
             save_settings(settings)
 
-            # редактируем оригинал и убираем кнопки
+            # Edit original and remove buttons
             await used.ctx.edit_origin(
                 embed=Embed(
-                    title="Готово ! 🎉",
-                    description=f"Выбран файл для клонирования: `{fname}`"
+                    title="Done! 🎉",
+                    description=f"Selected file for cloning: `{fname}`"
                 ),
                 components=[]
             )
-            # и, если хотите, шлём отдельное эпhemeral-подтверждение
-            await used.ctx.send("Конфигурация сохранена ✅", ephemeral=True)
+            # Send separate ephemeral confirmation if desired
+            await used.ctx.send("Configuration saved ✅", ephemeral=True)
             return
 
         embed, components = generate_file_list_page(sample_files, page)
