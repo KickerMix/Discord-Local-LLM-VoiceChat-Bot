@@ -10,9 +10,6 @@ audio/
 # Debug log
 bot_debug.log
 
-# Settings file
-settings.json
-
 # Ignore everything in sample folder except sample_default.wav
 /sample/*
 !/sample/
